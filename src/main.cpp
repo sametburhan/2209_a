@@ -1,9 +1,9 @@
-/**
+/******************************************************
  * #include "SoftwareSerial.h"
  * çift seri port kullanılacaksa eklenecek kütüphane
  *
  * Include library
- */
+ *****************************************************/
 
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -13,9 +13,9 @@
 #include "sdkconfig.h"
 #include "esp_system.h"
 
-/**
+/***************************
  * Define and variable
- */
+ **************************/
 #define RUNNING_CORE_0 0
 #define RUNNING_CORE_1 1
 
@@ -32,17 +32,17 @@ Servo servo4;
 
 Adafruit_MPU6050 mpu;
 
-/**
+/****************************
  * Variables
- */
+ ***************************/
 volatile uint8_t set_thrust = 0;
 volatile float roll, pitch;
 const int minUs = 1000;
 const int maxUs = 2000;
 
-/**
+/****************************
  * Function decleration
- */
+ ***************************/
 static void TaskFirst(void *pvParameters);
 static void TaskSecond(void *pvParameters);
 static void PWM_Init();
@@ -189,9 +189,9 @@ void Move()
 void Idle()
 {
 
-  /**
+  /****************************
    * Roll
-   */
+   ***************************/
   if (roll < 1.5 && roll > -1.5)
   {
     // Serial.println("roll tolerans aralığında");
@@ -207,9 +207,9 @@ void Idle()
     servo4.write(set_thrust + 1 * roll / 2);
   }
   delay(10);
-  /**
+  /****************************
    * Pitch
-   */
+   ***************************/
   if (pitch < 1.5 && pitch > -1.5)
   {
     // Serial.println("pitch tolerans aralığında");
@@ -227,16 +227,16 @@ void Idle()
   delay(10);
 }
 
-/**
+/****************************
  * Setup
- */
+ ***************************/
 void setup()
 {
   Serial.begin(115200);
-  /**
+  /********************************************************************************
    * Serial1.begin(9600);
    * Eğer 2 farklı seri port kullanılacaksa konfigüre edilecek
-   */
+   *******************************************************************************/
 
   MPU_Init();
   PWM_Init();
