@@ -166,7 +166,7 @@ void MPU_Motion()
     Serial.println(roll);
     Serial.print("pitch =");
     Serial.println(pitch);
-    Idle();
+    // Idle();
   }
 }
 
@@ -198,12 +198,8 @@ void Move()
 
 void Idle()
 {
-  set_thrust = 100;
   full_pid(set_thrust, servo1, servo2, servo3, servo4, KP, KI, KD, pitch, roll, 0.0);
-  delay(10);
-  Serial.print("thrust = ");
-  Serial.println(set_thrust);
-  delay(10);
+  delay(1);
 }
 
 /****************************
@@ -246,6 +242,9 @@ void loop()
   // FreeRTOS
 }
 
+/****************************
+ * Task 1
+ ***************************/
 void TaskFirst(void *pvParameters) //
 {
   (void)pvParameters;
@@ -256,6 +255,9 @@ void TaskFirst(void *pvParameters) //
   }
 }
 
+/****************************
+ * Task 2
+ ***************************/
 void TaskSecond(void *pvParameters) //
 {
   (void)pvParameters;
