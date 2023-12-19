@@ -12,6 +12,7 @@
 #include <ESP32Servo.h>
 #include "sdkconfig.h"
 #include "esp_system.h"
+#include "PID.cpp"
 
 /***************************
  * Define and variable
@@ -23,6 +24,10 @@
 #define servo_pin2 23
 #define servo_pin3 19
 #define servo_pin4 18
+
+#define KP 0.30
+#define KI 0.10
+#define KD 0.10
 
 ESP32PWM pwm;
 Servo servo1;
@@ -52,9 +57,12 @@ static void MPU_Init();
 static void MPU_Motion();
 static void Idle();
 
+/////////////////////////////////////////////
+//           Wifi RemoteXY Include         //
+/////////////////////////////////////////////
+
 #define REMOTEXY_MODE__ESP32CORE_WIFI_POINT
 #include <WiFi.h>
-
 #include <RemoteXY.h>
 
 // RemoteXY connection settings
@@ -98,10 +106,10 @@ void PWM_Init()
   ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
 
-  servo1.setPeriodHertz(100); // Standard 50hz servo
-  servo2.setPeriodHertz(100); // Standard 50hz servo
-  servo3.setPeriodHertz(100); // Standard 50hz servo
-  servo4.setPeriodHertz(100); // Standard 50hz servo
+  servo1.setPeriodHertz(100); // Standard 100hz
+  servo2.setPeriodHertz(100); // Standard 100hz
+  servo3.setPeriodHertz(100); // Standard 100hz
+  servo4.setPeriodHertz(100); // Standard 100hz
 
   servo1.attach(servo_pin1, minUs, maxUs);
   servo2.attach(servo_pin2, minUs, maxUs);
@@ -114,6 +122,7 @@ void Thrust()
   if (RemoteXY.thrust != set_thrust)
   {
     set_thrust = RemoteXY.thrust;
+    Serial.println(set_thrust);
     servo1.write(set_thrust);
     servo2.write(set_thrust);
     servo3.write(set_thrust);
@@ -144,7 +153,6 @@ void MPU_Init()
 
 void MPU_Motion()
 {
-
   if (mpu.getMotionInterruptStatus())
   {
     // Get new sensor events with the readings
@@ -154,8 +162,11 @@ void MPU_Motion()
     // Roll - Pitch
     roll = a.acceleration.roll;
     pitch = a.acceleration.pitch;
-    // Serial.println(roll);
-    // Serial.println(pitch);
+    Serial.print("roll =");
+    Serial.println(roll);
+    Serial.print("pitch =");
+    Serial.println(pitch);
+    Idle();
   }
 }
 
@@ -183,47 +194,15 @@ void Move()
     // şimdilik boş
     delay(1);
   }
-  Idle();
 }
 
 void Idle()
 {
-
-  /****************************
-   * Roll
-   ***************************/
-  if (roll < 1.5 && roll > -1.5)
-  {
-    // Serial.println("roll tolerans aralığında");
-  }
-  else if (roll < -1.5)
-  {
-    servo1.write(set_thrust + 1 * -roll / 2);
-    servo3.write(set_thrust + 1 * -roll / 2);
-  }
-  else if (roll > 1.5)
-  {
-    servo2.write(set_thrust + 1 * roll / 2);
-    servo4.write(set_thrust + 1 * roll / 2);
-  }
+  set_thrust = 100;
+  full_pid(set_thrust, servo1, servo2, servo3, servo4, KP, KI, KD, pitch, roll, 0.0);
   delay(10);
-  /****************************
-   * Pitch
-   ***************************/
-  if (pitch < 1.5 && pitch > -1.5)
-  {
-    // Serial.println("pitch tolerans aralığında");
-  }
-  else if (pitch < -1.5)
-  {
-    servo1.write(set_thrust + 1 * -pitch / 2);
-    servo2.write(set_thrust + 1 * -pitch / 2);
-  }
-  else if (pitch > 1.5)
-  {
-    servo3.write(set_thrust + 1 * pitch / 2);
-    servo4.write(set_thrust + 1 * pitch / 2);
-  }
+  Serial.print("thrust = ");
+  Serial.println(set_thrust);
   delay(10);
 }
 
