@@ -4,7 +4,7 @@
 double KP_roll_pitch = 0.30;
 double KI_roll_pitch = 0.10;
 double KD_roll_pitch = 0.10;
-
+/*
 struct MotorPowers calculateMotorPowers(float roll, float pitch)
 {
     // calculate orientation errors (error: difference between desired orientation and actual orientation)
@@ -29,7 +29,7 @@ struct MotorPowers calculateMotorPowers(float roll, float pitch)
 
     return motorPowers;
 }
-
+*/
 double getControlSignal(double error, double kp, double ki, double kd, double &pid_i, double &last_error, double delta_time_in_seconds)
 {
     double pid_p = error;
