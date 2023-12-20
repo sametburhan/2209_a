@@ -1,4 +1,7 @@
 /******************************************************
+ * Samet Burhan
+ * Quadcopter 2209-a projesi
+ *
  * #include "SoftwareSerial.h"
  * çift seri port kullanılacaksa eklenecek kütüphane
  *
@@ -25,6 +28,9 @@
 #define motor_solarka_3 19
 #define motor_sagarka_4 18
 
+#define servo_pin1 14
+#define servo_pin2 27
+
 #define KP 0.30
 #define KI 0.10
 #define KD 0.10
@@ -34,6 +40,8 @@ Servo frontLeftMotorPower;
 Servo frontRightMotorPower;
 Servo rearLeftMotorPower;
 Servo rearRightMotorPower;
+Servo sonarServo1;
+Servo sonarServo2;
 
 Adafruit_MPU6050 mpu;
 
@@ -58,6 +66,10 @@ static void MPU_Motion();
 static void Idle(float roll, float pitch);
 void spinMotors(struct MotorPowers motorPowers);
 void stopMotors();
+void Sonar_Servo_Init();
+bool Sonar_Detect();
+void Pre_Collision();
+void Servo_Degree();
 
 /****************************
  * Struct
@@ -112,6 +124,9 @@ struct
 //           END RemoteXY include          //
 /////////////////////////////////////////////
 
+/****************************
+ * Başlangıç fonksiyonları
+ ***************************/
 void PWM_Init()
 {
   ESP32PWM::allocateTimer(0);
@@ -130,6 +145,15 @@ void PWM_Init()
   rearRightMotorPower.attach(motor_sagarka_4, minUs, maxUs);
 
   stopMotors();
+}
+
+void Sonar_Servo_Init()
+{
+  sonarServo1.setPeriodHertz(100); // Standard 100hz
+  sonarServo2.setPeriodHertz(100); // Standard 100hz
+
+  sonarServo1.attach(servo_pin1, minUs, maxUs);
+  sonarServo2.attach(servo_pin2, minUs, maxUs);
 }
 
 void MPU_Init()
@@ -153,6 +177,36 @@ void MPU_Init()
   Serial.println("MPU 6050 kullanıma hazır");
 }
 
+/****************************
+ * Servo fonksiyonları
+ ***************************/
+void Servo_Degree()
+{
+  uint8_t degree = 0;
+  for (degree = 0; degree < 180; degree++)
+  {
+    sonarServo1.write(degree);
+    sonarServo2.write(degree);
+    if (Sonar_Detect() == true)
+    {
+      Pre_Collision();
+      delay(7);
+    }
+  }
+  for (degree = 180; degree > -180; degree--)
+  {
+    sonarServo1.write(degree);
+    sonarServo2.write(degree);
+    if (Sonar_Detect() == true)
+    {
+      Pre_Collision();
+      delay(7);
+    }
+  }
+}
+/****************************
+ * Hareket fonksiyonları
+ ***************************/
 void spinMotors(struct MotorPowers motorPowers)
 {
   frontLeftMotorPower.write(motorPowers.frontLeftMotorPower);
@@ -209,30 +263,64 @@ void Idle(float roll, float pitch)
   spinMotors(motorPowers);
 }
 
+/****************************
+ * Manevra fonksiyonları
+ ***************************/
+struct MotorPowers MoveMotorPowers(int up, int down, int right, int left)
+{
+  struct MotorPowers motorPowers;
+  motorPowers.frontLeftMotorPower = set_thrust + down + right;
+  motorPowers.frontRightMotorPower = set_thrust + down + left;
+  motorPowers.rearLeftMotorPower = set_thrust + up + right;
+  motorPowers.rearRightMotorPower = set_thrust + up + left;
+  return motorPowers;
+}
+
 void Move()
 {
-  while (RemoteXY.up)
+  if (RemoteXY.up || RemoteXY.down || RemoteXY.left || RemoteXY.right)
   {
-    Serial.println("ileri");
-    delay(1);
+    while (RemoteXY.up)
+    {
+      struct MotorPowers motorPowers = MoveMotorPowers(5, 0, 0, 0);
+      spinMotors(motorPowers);
+      delay(1);
+    }
+    while (RemoteXY.down)
+    {
+      struct MotorPowers motorPowers = MoveMotorPowers(0, 5, 0, 0);
+      spinMotors(motorPowers);
+      delay(1);
+    }
+    while (RemoteXY.right)
+    {
+      struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 5, 0);
+      spinMotors(motorPowers);
+      // şimdilik boş
+      delay(1);
+    }
+    while (RemoteXY.left)
+    {
+      struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 5);
+      spinMotors(motorPowers);
+      // şimdilik boş
+      delay(1);
+    }
+    struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 0);
+    spinMotors(motorPowers);
   }
-  while (RemoteXY.down)
-  {
-    Serial.println("geri");
-    delay(1);
-  }
-  while (RemoteXY.right)
-  {
-    Serial.println("sağ");
-    // şimdilik boş
-    delay(1);
-  }
-  while (RemoteXY.left)
-  {
-    Serial.println("sol");
-    // şimdilik boş
-    delay(1);
-  }
+}
+
+/****************************
+ * Engel tespit ve kaçış fonksiyonları
+ ***************************/
+bool Sonar_Detect()
+{
+  return false;
+}
+
+void Pre_Collision()
+{
 }
 
 /****************************
@@ -242,12 +330,13 @@ void setup()
 {
   Serial.begin(115200);
   /********************************************************************************
-   * Serial1.begin(9600);
+   * Serial1.begin(115200);
    * Eğer 2 farklı seri port kullanılacaksa konfigüre edilecek
    *******************************************************************************/
 
   MPU_Init();
   PWM_Init();
+  Sonar_Servo_Init();
   RemoteXY_Init();
 
   xTaskCreatePinnedToCore(
@@ -284,7 +373,8 @@ void TaskFirst(void *pvParameters) //
   for (;;)
   {
     RemoteXY_Handler();
-    delay(10);
+    delay(7);
+    Servo_Degree();
   }
 }
 
@@ -297,9 +387,10 @@ void TaskSecond(void *pvParameters) //
   for (;;)
   {
     Thrust();
+    delay(7);
     Move();
-    delay(10);
+    delay(7);
     MPU_Motion();
-    delay(10);
+    delay(7);
   }
 }

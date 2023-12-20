@@ -8,8 +8,8 @@ double KD_roll_pitch = 0.10;
 struct MotorPowers calculateMotorPowers(float roll, float pitch)
 {
     // calculate orientation errors (error: difference between desired orientation and actual orientation)
-    double rollError = receiverCommands.RollAngle - imu_values.CurrentOrientation.RollAngle;
-    double pitchError = receiverCommands.PitchAngle - imu_values.CurrentOrientation.PitchAngle;
+    double rollError = 0.0 - roll;   // receiverCommands.RollAngle
+    double pitchError = 0.0 - pitch; // receiverCommands.PitchAngle
     // calculate control gains based on errors
     roll_control_signal = getControlSignal(rollError, KP_roll_pitch, KI_roll_pitch, KD_roll_pitch, roll_pid_i, roll_last_error, imu_values.DeltaTimeInSeconds);
     pitch_control_signal = getControlSignal(pitchError, KP_roll_pitch, KI_roll_pitch, KD_roll_pitch, pitch_pid_i, pitch_last_error, imu_values.DeltaTimeInSeconds);
