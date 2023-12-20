@@ -20,20 +20,20 @@
 #define RUNNING_CORE_0 0
 #define RUNNING_CORE_1 1
 
-#define servo_pin1 5
-#define servo_pin2 23
-#define servo_pin3 19
-#define servo_pin4 18
+#define motor_solon_1 5
+#define motor_sagon_2 23
+#define motor_solarka_3 19
+#define motor_sagarka_4 18
 
 #define KP 0.30
 #define KI 0.10
 #define KD 0.10
 
 ESP32PWM pwm;
-Servo servo1;
-Servo servo2;
-Servo servo3;
-Servo servo4;
+Servo frontLeftMotorPower;
+Servo frontRightMotorPower;
+Servo rearLeftMotorPower;
+Servo rearRightMotorPower;
 
 Adafruit_MPU6050 mpu;
 
@@ -55,7 +55,20 @@ static void Thrust();
 static void Move();
 static void MPU_Init();
 static void MPU_Motion();
-static void Idle();
+static void Idle(float roll, float pitch);
+void spinMotors(struct MotorPowers motorPowers);
+void stopMotors();
+
+/****************************
+ * Struct
+ ***************************/
+struct MotorPowers
+{
+  int frontLeftMotorPower;
+  int frontRightMotorPower;
+  int rearLeftMotorPower;
+  int rearRightMotorPower;
+};
 
 /////////////////////////////////////////////
 //           Wifi RemoteXY Include         //
@@ -106,28 +119,17 @@ void PWM_Init()
   ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
 
-  servo1.setPeriodHertz(100); // Standard 100hz
-  servo2.setPeriodHertz(100); // Standard 100hz
-  servo3.setPeriodHertz(100); // Standard 100hz
-  servo4.setPeriodHertz(100); // Standard 100hz
+  frontLeftMotorPower.setPeriodHertz(100);  // Standard 100hz
+  frontRightMotorPower.setPeriodHertz(100); // Standard 100hz
+  rearLeftMotorPower.setPeriodHertz(100);   // Standard 100hz
+  rearRightMotorPower.setPeriodHertz(100);  // Standard 100hz
 
-  servo1.attach(servo_pin1, minUs, maxUs);
-  servo2.attach(servo_pin2, minUs, maxUs);
-  servo3.attach(servo_pin3, minUs, maxUs);
-  servo4.attach(servo_pin4, minUs, maxUs);
-}
+  frontLeftMotorPower.attach(motor_solon_1, minUs, maxUs);
+  frontRightMotorPower.attach(motor_sagon_2, minUs, maxUs);
+  rearLeftMotorPower.attach(motor_solarka_3, minUs, maxUs);
+  rearRightMotorPower.attach(motor_sagarka_4, minUs, maxUs);
 
-void Thrust()
-{
-  if (RemoteXY.thrust != set_thrust)
-  {
-    set_thrust = RemoteXY.thrust;
-    Serial.println(set_thrust);
-    servo1.write(set_thrust);
-    servo2.write(set_thrust);
-    servo3.write(set_thrust);
-    servo4.write(set_thrust);
-  }
+  stopMotors();
 }
 
 void MPU_Init()
@@ -151,6 +153,35 @@ void MPU_Init()
   Serial.println("MPU 6050 kullanıma hazır");
 }
 
+void spinMotors(struct MotorPowers motorPowers)
+{
+  frontLeftMotorPower.write(motorPowers.frontLeftMotorPower);
+  frontRightMotorPower.write(motorPowers.frontRightMotorPower);
+  rearLeftMotorPower.write(motorPowers.rearLeftMotorPower);
+  rearRightMotorPower.write(motorPowers.rearRightMotorPower);
+}
+
+void stopMotors()
+{
+  frontLeftMotorPower.write(0);
+  frontRightMotorPower.write(0);
+  rearLeftMotorPower.write(0);
+  rearRightMotorPower.write(0);
+}
+
+void Thrust()
+{
+  if (RemoteXY.thrust != set_thrust)
+  {
+    set_thrust = RemoteXY.thrust;
+    Serial.println(set_thrust);
+    frontLeftMotorPower.write(set_thrust);
+    frontRightMotorPower.write(set_thrust);
+    rearLeftMotorPower.write(set_thrust);
+    rearRightMotorPower.write(set_thrust);
+  }
+}
+
 void MPU_Motion()
 {
   if (mpu.getMotionInterruptStatus())
@@ -162,12 +193,20 @@ void MPU_Motion()
     // Roll - Pitch
     roll = a.acceleration.roll;
     pitch = a.acceleration.pitch;
+    //---------------------------
     Serial.print("roll =");
     Serial.println(roll);
     Serial.print("pitch =");
     Serial.println(pitch);
-    // Idle();
+    //---------------------------
+    Idle(roll, pitch);
   }
+}
+
+void Idle(float roll, float pitch)
+{
+  struct MotorPowers motorPowers = calculateMotorPowers(roll, pitch);
+  spinMotors(motorPowers);
 }
 
 void Move()
@@ -194,12 +233,6 @@ void Move()
     // şimdilik boş
     delay(1);
   }
-}
-
-void Idle()
-{
-  full_pid(set_thrust, servo1, servo2, servo3, servo4, KP, KI, KD, pitch, roll, 0.0);
-  delay(1);
 }
 
 /****************************
