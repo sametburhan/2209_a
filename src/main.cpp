@@ -57,7 +57,6 @@ Adafruit_MPU6050 mpu;
 /****************************
  * Variables
  ***************************/
-volatile uint8_t set_thrust = 0;
 volatile float roll, pitch;
 const int minUs = 1000;
 const int maxUs = 3000;
@@ -85,17 +84,6 @@ static bool Sonar_Detect(int degree);
 static void Pre_Collision();
 static void Servo_Degree();
 static void upOrDown(bool upOrDown);
-
-/****************************
- * Struct
- ***************************/
-struct MotorPowers
-{
-  int frontLeftMotorPower;
-  int frontRightMotorPower;
-  int rearLeftMotorPower;
-  int rearRightMotorPower;
-};
 
 struct DetectObject
 {
@@ -290,8 +278,8 @@ void MPU_Motion()
 
 void Idle(float roll, float pitch)
 {
-  // struct MotorPowers motorPowers = calculateMotorPowers(roll, pitch);
-  // spinMotors(motorPowers);
+  struct MotorPowers motorPowers = calculateMotorPowers(roll, pitch);
+  spinMotors(motorPowers);
 }
 
 /****************************
