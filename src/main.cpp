@@ -31,6 +31,9 @@
 #define servo_pin1 12
 #define servo_pin2 13
 
+/****************************
+ * Sonar Pinler
+ ***************************/
 // üst sonar
 #define trigPin1 14
 #define echoPin1 27
@@ -39,10 +42,16 @@
 #define trigPin2 25
 #define echoPin2 26
 #define down_sonar 1
+//**************************/
+#define all_sonar 2
 
 #define KP 0.30
 #define KI 0.10
 #define KD 0.10
+
+// 0 üst 1 alt
+#define object_up 0u
+#define object_down 1u
 
 ESP32PWM pwm;
 Servo frontLeftMotorPower;
@@ -83,11 +92,11 @@ static void Sonar_Servo_Init();
 static bool Sonar_Detect(int degree);
 static void Pre_Collision();
 static void Servo_Degree();
-static void upOrDown(bool upOrDown);
+static void upOrDown(uint8_t upOrDown);
 
 struct DetectObject
 {
-  bool up_down; // 0 üst 1 alt
+  uint8_t up_down; // 0 üst 1 alt
   int degree;
 };
 struct DetectObject object;
@@ -353,13 +362,23 @@ bool Sonar_Detect(int degree)
   if (distance1 < 12)
   {
     object.degree = degree;
+    // engel yukarıdan geldi
     object.up_down = up_sonar;
     return true;
   }
-  else if (distance2 < 12)
+  if (distance2 < 12)
   {
     object.degree = -1 * degree;
-    object.up_down = down_sonar;
+    if (object.up_down == up_sonar)
+    {
+      // engel hem üstten hem alttan geldi
+      object.up_down == all_sonar;
+    }
+    else
+    {
+      // engel aşağıdan geldi
+      object.up_down = down_sonar;
+    }
     return true;
   }
   else
@@ -376,30 +395,64 @@ bool Sonar_Detect(int degree)
  *******************************************************************************/
 void Pre_Collision()
 {
-  // sağ veya soldan gelen engel
-  if (object.degree > 90)
+  /****************************
+   * Sağ veya soldan gelen engel
+   ***************************/
+  if (object.degree > 90 && object.up_down != all_sonar)
   {
     upOrDown(object.up_down);
+    // sağa git
+    struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 7, 0);
+    spinMotors(motorPowers);
   }
-  else if (object.degree < 90)
+  else if (object.degree < 90 && object.up_down != all_sonar)
   {
+
     upOrDown(object.up_down);
+    // sola git
+    struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 7);
+    spinMotors(motorPowers);
   }
+  /****************************
+   * Karşıdan gelen engel
+   ***************************/
   else
   {
-    upOrDown(object.up_down);
-    // dik gelen engel
+    // doğrudan geri gel / ya bu şekil kalıcak ya da 1ms gibi kısa bir süre geri gelecek!!!
+    struct MotorPowers motorPowers = MoveMotorPowers(0, 7, 0, 0);
+    spinMotors(motorPowers);
   }
+
+  delay(200);
+  struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 0);
+  spinMotors(motorPowers);
+  Thrust();
   Serial.println("kaçtık");
 }
 
-void upOrDown(bool upOrDown)
+void upOrDown(uint8_t upOrDown)
 {
-  if (upOrDown)
+  if (upOrDown == object_up)
   {
+    /**
+     * engel yukarıdan geldi biraz alçal "thrust =- 5"
+     */
+    set_thrust = -5;
+    frontLeftMotorPower.write(set_thrust);
+    frontRightMotorPower.write(set_thrust);
+    rearLeftMotorPower.write(set_thrust);
+    rearRightMotorPower.write(set_thrust);
   }
-  else if (!upOrDown)
+  else if (!upOrDown == object_down)
   {
+    /**
+     * engel aşağıdan geldi biraz yüksel "thrust =+ 5"
+     */
+    set_thrust = +5;
+    frontLeftMotorPower.write(set_thrust);
+    frontRightMotorPower.write(set_thrust);
+    rearLeftMotorPower.write(set_thrust);
+    rearRightMotorPower.write(set_thrust);
   }
 }
 
@@ -459,7 +512,7 @@ void setup()
       ,
       NULL, 1 // Priority
       ,
-      NULL, RUNNING_CORE_0);
+      NULL, RUNNING_CORE_1);
 }
 
 void loop()
@@ -506,6 +559,9 @@ void TaskServo(void *pvParameters)
   (void)pvParameters;
   for (;;)
   {
-    Servo_Degree();
+    if (set_thrust != 0)
+    {
+      Servo_Degree();
+    }
   }
 }
