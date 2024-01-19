@@ -15,9 +15,9 @@ double getControlSignal(double error, double kp, double ki, double kd, double &p
 struct MotorPowers reduceMotorPowers(MotorPowers motorPowers);
 
 //----------- PID CONFIGURATION-----------
-double KP_roll_pitch = 0.30;
-double KI_roll_pitch = 0.10;
-double KD_roll_pitch = 0.10;
+double KP_roll_pitch = 0.03;
+double KI_roll_pitch = 0.1;
+double KD_roll_pitch = 0.1;
 
 volatile uint8_t set_thrust = 0;
 
@@ -25,14 +25,14 @@ unsigned long last_time = 0;
 double roll_pid_i, pitch_pid_i, roll_last_error, pitch_last_error;
 double roll_control_signal, pitch_control_signal;
 
-double QUADCOPTER_MAX_TILT_ANGLE = 20.00; // roll, pitch tilt angle limit in degrees
+double QUADCOPTER_MAX_TILT_ANGLE = 10.00; // roll, pitch tilt angle limit in degrees
 double ROLL_PITCH_CONTROL_SIGNAL_LIMIT = KP_roll_pitch * QUADCOPTER_MAX_TILT_ANGLE * 2;
 
 struct MotorPowers calculateMotorPowers(float roll, float pitch)
 {
     // calculate orientation errors (error: difference between desired orientation and actual orientation)
-    double rollError = 0.0 - roll;   // receiverCommands.RollAngle
-    double pitchError = 0.0 - pitch; // receiverCommands.PitchAngle
+    double rollError = roll;   // receiverCommands.RollAngle
+    double pitchError = pitch; // receiverCommands.PitchAngle
 
     unsigned long current_time = millis();
     unsigned long delta_time_in_milliseconds = current_time - last_time;

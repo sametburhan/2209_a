@@ -5,6 +5,8 @@
  * #include "SoftwareSerial.h"
  * çift seri port kullanılacaksa eklenecek kütüphane
  *
+ *
+ *
  * Include library
  *****************************************************/
 
@@ -45,10 +47,6 @@
 //**************************/
 #define all_sonar 2
 
-#define KP 0.30
-#define KI 0.10
-#define KD 0.10
-
 // 0 üst 1 alt
 #define object_up 0u
 #define object_down 1u
@@ -68,10 +66,12 @@ Adafruit_MPU6050 mpu;
  ***************************/
 volatile float roll, pitch;
 const int minUs = 1000;
-const int maxUs = 3000;
+const int maxUs = 3000; // todo: 2000 yeterli olmazsa ~3000
 
 volatile long duration1, duration2;
 volatile uint8_t distance1, distance2;
+
+volatile bool Collision_Flag = 0;
 
 /****************************
  * Function decleration
@@ -79,6 +79,7 @@ volatile uint8_t distance1, distance2;
 static void TaskFirst(void *pvParameters);
 static void TaskSecond(void *pvParameters);
 static void TaskServo(void *pvParameters);
+static void TaskPreCollision(void *pvParameters);
 static void PWM_Init();
 static void Thrust();
 static void Move();
@@ -211,7 +212,7 @@ void Servo_Degree()
     {
       if (Sonar_Detect(degree) == true)
       {
-        Pre_Collision();
+        Collision_Flag = true;
       }
     }
   }
@@ -225,7 +226,7 @@ void Servo_Degree()
     {
       if (Sonar_Detect(degree) == true)
       {
-        Pre_Collision();
+        Collision_Flag = true;
       }
     }
   }
@@ -253,10 +254,11 @@ void stopMotors()
 
 void Thrust()
 {
-  if (RemoteXY.thrust != set_thrust)
+  delay(500);
+  if (set_thrust != 35) // RemoteXY.thrust != set_thrust)
   {
     set_thrust = RemoteXY.thrust;
-    Serial.println(set_thrust);
+    set_thrust = 35;
     frontLeftMotorPower.write(set_thrust);
     frontRightMotorPower.write(set_thrust);
     rearLeftMotorPower.write(set_thrust);
@@ -266,7 +268,7 @@ void Thrust()
 
 void MPU_Motion()
 {
-  if (mpu.getMotionInterruptStatus())
+  if (1) // mpu.getMotionInterruptStatus())
   {
     // Get new sensor events with the readings
     sensors_event_t a, g, temp;
@@ -392,6 +394,7 @@ bool Sonar_Detect(int degree)
  * Yukarıdan gelirse hafif alçalarak geri manevra yap
  * Engel sağdan gelirse hafif sola git
  * Soldan gelirse hafif sağa git
+ * Karşıdan gelirse geri git
  *******************************************************************************/
 void Pre_Collision()
 {
@@ -418,12 +421,12 @@ void Pre_Collision()
    ***************************/
   else
   {
-    // doğrudan geri gel / ya bu şekil kalıcak ya da 1ms gibi kısa bir süre geri gelecek!!!
+    // doğrudan geri gel
     struct MotorPowers motorPowers = MoveMotorPowers(0, 7, 0, 0);
     spinMotors(motorPowers);
   }
 
-  delay(200);
+  delay(200); // todo: 200ms çok olabilir
   struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 0);
   spinMotors(motorPowers);
   Thrust();
@@ -457,7 +460,7 @@ void upOrDown(uint8_t upOrDown)
 }
 
 /****************************
- * Setup
+ * MPU 6050
  ***************************/
 void setup()
 {
@@ -482,12 +485,13 @@ void setup()
    * sonar
    ***************************/
   RemoteXY_Init();
-  while (RemoteXY.connect_flag)
+  while (false) // RemoteXY.connect_flag)
   {
     Serial.println("BAğlantı sağlanmadı...");
     RemoteXY_Handler();
     delay(50);
   }
+
   xTaskCreatePinnedToCore(
       TaskFirst, "TaskFirst" // Name
       ,
@@ -511,6 +515,14 @@ void setup()
       1024 // Stack size
       ,
       NULL, 1 // Priority
+      ,
+      NULL, RUNNING_CORE_1);
+
+  xTaskCreatePinnedToCore(
+      TaskPreCollision, "TaskCollision",
+      1024 // Stack size
+      ,
+      NULL, 3 // Priority
       ,
       NULL, RUNNING_CORE_1);
 }
@@ -559,9 +571,27 @@ void TaskServo(void *pvParameters)
   (void)pvParameters;
   for (;;)
   {
-    if (set_thrust != 0)
+    if (false) // set_thrust != 0)
     {
       Servo_Degree();
     }
+    delay(7);
+  }
+}
+
+/****************************
+ * Task pre collision
+ ***************************/
+void TaskPreCollision(void *pvParameters)
+{
+  (void)pvParameters;
+  for (;;)
+  {
+    if (Collision_Flag)
+    {
+      Pre_Collision();
+      Collision_Flag = false;
+    }
+    delay(7);
   }
 }
