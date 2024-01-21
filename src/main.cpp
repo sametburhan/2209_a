@@ -19,6 +19,8 @@
 #include "esp_system.h"
 #include "PID.cpp"
 
+#include <Smoothed.h>
+
 /***************************
  * Define and variable
  **************************/
@@ -60,11 +62,13 @@ Servo sonarServo1;
 Servo sonarServo2;
 
 Adafruit_MPU6050 mpu;
+Smoothed<float> mySensor;
+Smoothed<float> mySensor2;
 
 /****************************
  * Variables
  ***************************/
-volatile float roll, pitch;
+volatile double roll, pitch, yaw;
 const int minUs = 1000;
 const int maxUs = 3000; // todo: 2000 yeterli olmazsa ~3000
 
@@ -85,7 +89,7 @@ static void Thrust();
 static void Move();
 static void MPU_Init();
 static void MPU_Motion();
-static void Idle(float roll, float pitch);
+static void Idle(double roll, double pitch, double yaw);
 static void spinMotors(struct MotorPowers motorPowers);
 static struct MotorPowers MoveMotorPowers(uint8_t up, uint8_t down, uint8_t right, uint8_t left);
 static void stopMotors();
@@ -188,7 +192,7 @@ void MPU_Init()
     }
   }
 
-  mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
+  mpu.setHighPassFilter(MPU6050_HIGHPASS_5_HZ);
   mpu.setMotionDetectionThreshold(1);
   mpu.setMotionDetectionDuration(20);
   mpu.setInterruptPinLatch(true); // Keep it latched.  Will turn off when reinitialized.
@@ -254,11 +258,11 @@ void stopMotors()
 
 void Thrust()
 {
-  delay(500);
-  if (set_thrust != 35) // RemoteXY.thrust != set_thrust)
+  // delay(500);
+  if (RemoteXY.thrust != set_thrust) // set_thrust != 30
   {
     set_thrust = RemoteXY.thrust;
-    set_thrust = 35;
+    // set_thrust = 30;
     frontLeftMotorPower.write(set_thrust);
     frontRightMotorPower.write(set_thrust);
     rearLeftMotorPower.write(set_thrust);
@@ -268,28 +272,43 @@ void Thrust()
 
 void MPU_Motion()
 {
-  if (1) // mpu.getMotionInterruptStatus())
+  if (mpu.getMotionInterruptStatus())
   {
     // Get new sensor events with the readings
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
+    unsigned long current_time = millis();
+    unsigned long delta_time_in_milliseconds = current_time - last_time;
+    delta_time_in_seconds = (double)delta_time_in_milliseconds / 1000.0;
 
     // Roll - Pitch
-    roll = a.acceleration.roll;
-    pitch = a.acceleration.pitch;
-    //---------------------------
+    mySensor.add(a.orientation.x);
     Serial.print("roll =");
-    Serial.println(roll);
+    Serial.println(a.orientation.x);
+    roll = mySensor.get();
+
+    mySensor2.add(a.orientation.y);
     Serial.print("pitch =");
-    Serial.println(pitch);
+    Serial.println(a.orientation.y);
+    pitch = mySensor2.get();
+
+    yaw = 0;
+    last_time = current_time;
     //---------------------------
-    Idle(roll, pitch);
+    Serial.print("smooth roll =");
+    Serial.println(roll);
+    Serial.print("smooth pitch =");
+    Serial.println(pitch);
+    // Serial.print("yaw =");
+    // Serial.println(yaw);
+    //---------------------------
+    Idle(roll, pitch, yaw);
   }
 }
 
-void Idle(float roll, float pitch)
+void Idle(double roll, double pitch, double yaw)
 {
-  struct MotorPowers motorPowers = calculateMotorPowers(roll, pitch);
+  struct MotorPowers motorPowers = calculateMotorPowers(roll, pitch, yaw);
   spinMotors(motorPowers);
 }
 
@@ -308,7 +327,7 @@ struct MotorPowers MoveMotorPowers(uint8_t up, uint8_t down, uint8_t right, uint
 
 void Move()
 {
-  if (RemoteXY.up || RemoteXY.down || RemoteXY.left || RemoteXY.right)
+  if (1) // RemoteXY.up || RemoteXY.down || RemoteXY.left || RemoteXY.right)
   {
     while (RemoteXY.up)
     {
@@ -472,6 +491,8 @@ void setup()
 
   MPU_Init();
   PWM_Init();
+  mySensor.begin(SMOOTHED_AVERAGE, 10);
+  mySensor2.begin(SMOOTHED_AVERAGE, 10);
   Sonar_Servo_Init();
   /****************************
    * sonar init
@@ -485,7 +506,7 @@ void setup()
    * sonar
    ***************************/
   RemoteXY_Init();
-  while (false) // RemoteXY.connect_flag)
+  while (RemoteXY.connect_flag)
   {
     Serial.println("BAğlantı sağlanmadı...");
     RemoteXY_Handler();
