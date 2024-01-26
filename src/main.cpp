@@ -6,7 +6,7 @@
  * çift seri port kullanılacaksa eklenecek kütüphane
  *
  *
- *
+ * Eğitim test
  * Include library
  *****************************************************/
 
