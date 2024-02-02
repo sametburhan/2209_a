@@ -18,9 +18,9 @@ double calculateYawError(double yaw, double DeltaTimeInSeconds);
 double fix360degrees(double val);
 
 //----------- PID CONFIGURATION-----------
-double KP_roll_pitch = 0.5;
-double KI_roll_pitch = 0.01;
-double KD_roll_pitch = 0.2;
+double KP_roll_pitch = 1.3;
+double KI_roll_pitch = 0.05;
+double KD_roll_pitch = 15;
 
 double KP_yaw = 0.40;
 double KI_yaw = 0.50;
@@ -77,7 +77,6 @@ struct MotorPowers calculateMotorPowers(double roll, double pitch, double yaw)
 
 double getControlSignal(double error, double kp, double ki, double kd, double &pid_i, double &last_error, double delta_time_in_seconds)
 {
-
     double pid_p = error;
     double pid_d = (error - last_error) / delta_time_in_seconds;
     pid_i += error * delta_time_in_seconds;

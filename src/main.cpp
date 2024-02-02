@@ -6,18 +6,20 @@
  * çift seri port kullanılacaksa eklenecek kütüphane
  *
  *
- * Eğitim test
+ *
  * Include library
  *****************************************************/
 
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
+#include <MadgwickAHRS.h>
 
 #include <ESP32Servo.h>
 #include "sdkconfig.h"
 #include "esp_system.h"
 #include "PID.cpp"
+#include "MPU.cpp"
 
 #include <Smoothed.h>
 
@@ -60,6 +62,8 @@ Servo rearLeftMotorPower;
 Servo rearRightMotorPower;
 Servo sonarServo1;
 Servo sonarServo2;
+
+Madgwick MadgwickFilter;
 
 Adafruit_MPU6050 mpu;
 Smoothed<float> mySensor;
@@ -259,10 +263,10 @@ void stopMotors()
 void Thrust()
 {
   // delay(500);
-  if (RemoteXY.thrust != set_thrust) // set_thrust != 30
+  if (set_thrust != 30) // RemoteXY.thrust != set_thrust
   {
     set_thrust = RemoteXY.thrust;
-    // set_thrust = 30;
+    set_thrust = 30;
     frontLeftMotorPower.write(set_thrust);
     frontRightMotorPower.write(set_thrust);
     rearLeftMotorPower.write(set_thrust);
@@ -272,7 +276,7 @@ void Thrust()
 
 void MPU_Motion()
 {
-  if (mpu.getMotionInterruptStatus())
+  if (0) // mpu.getMotionInterruptStatus())
   {
     // Get new sensor events with the readings
     sensors_event_t a, g, temp;
@@ -304,6 +308,7 @@ void MPU_Motion()
     //---------------------------
     Idle(roll, pitch, yaw);
   }
+  MPU_hareket();
 }
 
 void Idle(double roll, double pitch, double yaw)
@@ -489,7 +494,10 @@ void setup()
    * Eğer 2 farklı seri port kullanılacaksa konfigüre edilecek
    *******************************************************************************/
 
-  MPU_Init();
+  // MPU_Init();
+  MPU_Baslat();
+  // MadgwickFilter
+  MadgwickFilter.begin(10); // filtering frequency 100Hz
   PWM_Init();
   mySensor.begin(SMOOTHED_AVERAGE, 10);
   mySensor2.begin(SMOOTHED_AVERAGE, 10);
@@ -506,7 +514,7 @@ void setup()
    * sonar
    ***************************/
   RemoteXY_Init();
-  while (RemoteXY.connect_flag)
+  while (0) // RemoteXY.connect_flag)
   {
     Serial.println("BAğlantı sağlanmadı...");
     RemoteXY_Handler();
@@ -563,7 +571,7 @@ void TaskFirst(void *pvParameters) //
   for (;;)
   {
     RemoteXY_Handler();
-    delay(7);
+    delay(1);
   }
 }
 
@@ -576,11 +584,15 @@ void TaskSecond(void *pvParameters) //
   for (;;)
   {
     Thrust();
-    delay(7);
     Move();
-    delay(7);
+    // long int t1 = micros();
     MPU_Motion();
-    delay(7);
+    // long int t2;
+    // Serial.print("Time taken by the task: ");
+    // Serial.print(t1 - t2);
+    // Serial.println(" microseconds");
+    // t2 = micros();
+    delay(1);
   }
 }
 
@@ -596,7 +608,7 @@ void TaskServo(void *pvParameters)
     {
       Servo_Degree();
     }
-    delay(7);
+    delay(1);
   }
 }
 
@@ -613,6 +625,6 @@ void TaskPreCollision(void *pvParameters)
       Pre_Collision();
       Collision_Flag = false;
     }
-    delay(7);
+    delay(1);
   }
 }
