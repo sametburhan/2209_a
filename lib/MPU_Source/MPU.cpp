@@ -1,19 +1,48 @@
 #include "wire.h"
 #include "Arduino.h"
+#include <MadgwickAHRS.h>
+#include <math.h>
+#include "PID.cpp"
+#include <ESP32Servo.h>
+#include "movingAvg.h"
+
+#define Deg2rad 3.1415 / 180
+
+void Idle(double roll, double pitch, double yaw);
+void spinMotors(struct MotorPowers motorPowers);
+
+movingAvg roll_mov(5);
+movingAvg pitch_mov(5);
+movingAvg yaw_mov(5);
+
+Madgwick MadgwickFilter;
+Servo frontLeftMotorPower;
+Servo frontRightMotorPower;
+Servo rearLeftMotorPower;
+Servo rearRightMotorPower;
 
 // Declaring some global variables
-int gyro_x, gyro_y, gyro_z;
-long acc_x, acc_y, acc_z, acc_total_vector;
-int temperature;
-long loop_timer;
-long gyro_x_cal, gyro_y_cal, gyro_z_cal;
-int lcd_loop_counter;
-float angle_pitch, angle_roll;
-int angle_pitch_buffer, angle_roll_buffer;
-boolean set_gyro_angles;
-float angle_roll_acc, angle_pitch_acc;
-float angle_pitch_output, angle_roll_output;
-int temp;
+const int MPU_addr = 0x68; // I2C address of the MPU-6050
+int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ, MgX, MgY, MgZ;
+float SF_Acc = 16384;             // 加速度のスケールファクタ   (digit/g)
+float SF_Gy = 131;                // #ジャイロのスケールファクタ  (digit/dps)
+float SF_Mg = 500;                // 磁気のスケールファクタ(500☛0.6かも。。)
+float SF_Tmp = 333.87;            // 温度のスケールファクタ
+float g2mpss = 9.80665;           // Gをm/s2に変換
+float deg2rad = 3.14159265 / 180; // ディグリーをラジアンに
+int i;
+float ROLL, PITCH, YAW;
+
+volatile int timeCounter1;
+hw_timer_t *timer1 = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+void IRAM_ATTR onTimer1()
+{
+
+    portENTER_CRITICAL_ISR(&timerMux);
+    timeCounter1++;
+    portEXIT_CRITICAL_ISR(&timerMux);
+}
 
 void MPU_Baslat();
 void MPU_hareket();
@@ -43,69 +72,28 @@ void MPU_Baslat()
     Wire.write(0x03);             // Set the register bits as 00000011 (Set Digital Low Pass Filter to ~43Hz)
     Wire.endTransmission();       // End the transmission with the gyro
     Serial.print("MPU6050 Hazır.");
-
-    for (int cal_int = 0; cal_int < 1000; cal_int++)
-    {                         // Run this code 2000 times
-        read_mpu_6050_data(); // Read the raw acc and gyro data from the MPU-6050
-        gyro_x_cal += gyro_x; // Add the gyro x-axis offset to the gyro_x_cal variable
-        gyro_y_cal += gyro_y; // Add the gyro y-axis offset to the gyro_y_cal variable
-        gyro_z_cal += gyro_z; // Add the gyro z-axis offset to the gyro_z_cal variable
-        delay(3);             // Delay 3us to simulate the 250Hz program loop
-    }
-    gyro_x_cal /= 1000; // Divide the gyro_x_cal variable by 2000 to get the avarage offset
-    gyro_y_cal /= 1000; // Divide the gyro_y_cal variable by 2000 to get the avarage offset
-    gyro_z_cal /= 1000;
-
-    loop_timer = micros(); // Reset the loop timer
+    roll_mov.begin();
+    pitch_mov.begin();
+    yaw_mov.begin();
 }
 
 void MPU_hareket()
 {
-    read_mpu_6050_data(); // Read the raw acc and gyro data from the MPU-6050
-
-    gyro_x -= gyro_x_cal; // Subtract the offset calibration value from the raw gyro_x value
-    gyro_y -= gyro_y_cal; // Subtract the offset calibration value from the raw gyro_y value
-    gyro_z -= gyro_z_cal; // Subtract the offset calibration value from the raw gyro_z value
-
-    // Gyro angle calculations
-    // 0.0000611 = 1 / (250Hz / 65.5)
-    angle_pitch += gyro_x * 0.0000611; // Calculate the traveled pitch angle and add this to the angle_pitch variable
-    angle_roll += gyro_y * 0.0000611;  // Calculate the traveled roll angle and add this to the angle_roll variable
-
-    // 0.000001066 = 0.0000611 * (3.142(PI) / 180degr) The Arduino sin function is in radians
-    angle_pitch += angle_roll * sin(gyro_z * 0.000001066); // If the IMU has yawed transfer the roll angle to the pitch angel
-    angle_roll -= angle_pitch * sin(gyro_z * 0.000001066); // If the IMU has yawed transfer the pitch angle to the roll angel
-
-    // Accelerometer angle calculations
-    acc_total_vector = sqrt((acc_x * acc_x) + (acc_y * acc_y) + (acc_z * acc_z)); // Calculate the total accelerometer vector
-    // 57.296 = 1 / (3.142 / 180) The Arduino asin function is in radians
-    angle_pitch_acc = asin((float)acc_y / acc_total_vector) * 57.296; // Calculate the pitch angle
-    angle_roll_acc = asin((float)acc_x / acc_total_vector) * -57.296; // Calculate the roll angle
-
-    // Place the MPU-6050 spirit level and note the values in the following two lines for calibration
-    angle_pitch_acc -= 0.0; // Accelerometer calibration value for pitch
-    angle_roll_acc -= 0.0;  // Accelerometer calibration value for roll
-
-    if (set_gyro_angles)
-    {                                                                  // If the IMU is already started
-        angle_pitch = angle_pitch * 0.9996 + angle_pitch_acc * 0.0004; // Correct the drift of the gyro pitch angle with the accelerometer pitch angle
-        angle_roll = angle_roll * 0.9996 + angle_roll_acc * 0.0004;    // Correct the drift of the gyro roll angle with the accelerometer roll angle
+    unsigned long time; // 「time」をunsigned longで変数宣言, declared "time"as variable
+    time = millis();
+    if (timeCounter1 > 0)
+    {
+        portENTER_CRITICAL(&timerMux);
+        timeCounter1--;
+        portEXIT_CRITICAL(&timerMux);
+        read_mpu_6050_data(); // Read the raw acc and gyro data from the MPU-6050
+        MadgwickFilter.update(GyX / SF_Gy, GyY / SF_Gy, GyZ / SF_Gy, AcX / SF_Acc, AcY / SF_Acc, AcZ / SF_Acc, MgX / SF_Mg, MgY / SF_Mg, MgZ / SF_Mg);
+        ROLL = roll_mov.reading(MadgwickFilter.getRoll());
+        PITCH = pitch_mov.reading(MadgwickFilter.getPitch());
+        YAW = yaw_mov.reading(MadgwickFilter.getYaw());
+        // output();
+        Idle(PITCH, ROLL, YAW);
     }
-    else
-    {                                  // At first start
-        angle_pitch = angle_pitch_acc; // Set the gyro pitch angle equal to the accelerometer pitch angle
-        angle_roll = angle_roll_acc;   // Set the gyro roll angle equal to the accelerometer roll angle
-        set_gyro_angles = true;        // Set the IMU started flag
-    }
-
-    // To dampen the pitch and roll angles a complementary filter is used
-    angle_pitch_output = angle_pitch_output * 0.9 + angle_pitch * 0.1; // Take 90% of the output pitch value and add 10% of the raw pitch value
-    angle_roll_output = angle_roll_output * 0.9 + angle_roll * 0.1;    // Take 90% of the output roll value and add 10% of the raw roll value
-
-    // output(); // Write the roll and pitch values to the LCD display
-    while (micros() - loop_timer < 4000)
-        ; // Wait until the loop_timer reaches 4000us (250Hz) before starting the next loop
-    loop_timer = micros();
 }
 
 void read_mpu_6050_data()
@@ -115,21 +103,48 @@ void read_mpu_6050_data()
     Wire.endTransmission();       // End the transmission
     Wire.requestFrom(0x68, 14);   // Request 14 bytes from the MPU-6050
     while (Wire.available() < 14)
-        ; // Wait until all the bytes are received
-    acc_x = Wire.read() << 8 | Wire.read();
-    acc_y = Wire.read() << 8 | Wire.read();
-    acc_z = Wire.read() << 8 | Wire.read();
-    temp = Wire.read() << 8 | Wire.read();
-    gyro_x = Wire.read() << 8 | Wire.read();
-    gyro_y = Wire.read() << 8 | Wire.read();
-    gyro_z = Wire.read() << 8 | Wire.read();
+        ;                                 // Wait until all the bytes are received
+    AcX = Wire.read() << 8 | Wire.read(); // 0x3B (ACCEL_XOUT_H) & 0x3C (ACCEL_XOUT_L)
+    AcY = Wire.read() << 8 | Wire.read(); // 0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
+    AcZ = Wire.read() << 8 | Wire.read(); // 0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
+    Tmp = Wire.read() << 8 | Wire.read(); // 0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
+    GyX = Wire.read() << 8 | Wire.read(); // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
+    GyY = Wire.read() << 8 | Wire.read(); // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
+    GyZ = Wire.read() << 8 | Wire.read(); // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
 }
 
 void output()
 {
-    Serial.print("Pitch: ");
-    Serial.print(angle_pitch_output);
-    Serial.print(" + ");
-    Serial.print("Roll: ");
-    Serial.println(angle_roll_output);
+    Serial.print(ROLL);
+    Serial.print(",");
+    Serial.print(PITCH);
+    Serial.print(",");
+    Serial.print(YAW);
+    Serial.print("\n");
+}
+
+void Idle(double roll, double pitch, double yaw)
+{
+    struct MotorPowers motorPowers = calculateMotorPowers(roll, pitch, yaw);
+    spinMotors(motorPowers);
+}
+
+/****************************
+ * Hareket fonksiyonları
+ ***************************/
+void spinMotors(struct MotorPowers motorPowers)
+{
+    Serial.print("sol ön =");
+    Serial.println(motorPowers.frontLeftMotorPower);
+    Serial.print("sağ ön =");
+    Serial.println(motorPowers.frontRightMotorPower);
+    Serial.print("sol arka = ");
+    Serial.println(motorPowers.rearLeftMotorPower);
+    Serial.print("sağ arka = ");
+    Serial.println(motorPowers.rearRightMotorPower);
+    Serial.println("******************************");
+    frontLeftMotorPower.write(motorPowers.frontLeftMotorPower);
+    frontRightMotorPower.write(motorPowers.frontRightMotorPower);
+    rearLeftMotorPower.write(motorPowers.rearLeftMotorPower);
+    rearRightMotorPower.write(motorPowers.rearRightMotorPower);
 }

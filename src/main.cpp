@@ -13,15 +13,10 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
-#include <MadgwickAHRS.h>
 
-#include <ESP32Servo.h>
 #include "sdkconfig.h"
 #include "esp_system.h"
-#include "PID.cpp"
 #include "MPU.cpp"
-
-#include <Smoothed.h>
 
 /***************************
  * Define and variable
@@ -56,23 +51,14 @@
 #define object_down 1u
 
 ESP32PWM pwm;
-Servo frontLeftMotorPower;
-Servo frontRightMotorPower;
-Servo rearLeftMotorPower;
-Servo rearRightMotorPower;
 Servo sonarServo1;
 Servo sonarServo2;
 
-Madgwick MadgwickFilter;
-
 Adafruit_MPU6050 mpu;
-Smoothed<float> mySensor;
-Smoothed<float> mySensor2;
 
 /****************************
  * Variables
  ***************************/
-volatile double roll, pitch, yaw;
 const int minUs = 1000;
 const int maxUs = 3000; // todo: 2000 yeterli olmazsa ~3000
 
@@ -91,11 +77,8 @@ static void TaskPreCollision(void *pvParameters);
 static void PWM_Init();
 static void Thrust();
 static void Move();
-static void MPU_Init();
 static void MPU_Motion();
-static void Idle(double roll, double pitch, double yaw);
-static void spinMotors(struct MotorPowers motorPowers);
-static struct MotorPowers MoveMotorPowers(uint8_t up, uint8_t down, uint8_t right, uint8_t left);
+MotorPowers MoveMotorPowers(uint8_t up, uint8_t down, uint8_t right, uint8_t left);
 static void stopMotors();
 static void Sonar_Servo_Init();
 static bool Sonar_Detect(int degree);
@@ -184,27 +167,6 @@ void Sonar_Servo_Init()
   sonarServo2.attach(servo_pin2, minUs, maxUs);
 }
 
-void MPU_Init()
-{
-
-  if (!mpu.begin())
-  {
-    while (1)
-    {
-      Serial.println("MPU 6050 bulunamadı");
-      delay(100);
-    }
-  }
-
-  mpu.setHighPassFilter(MPU6050_HIGHPASS_5_HZ);
-  mpu.setMotionDetectionThreshold(1);
-  mpu.setMotionDetectionDuration(20);
-  mpu.setInterruptPinLatch(true); // Keep it latched.  Will turn off when reinitialized.
-  mpu.setInterruptPinPolarity(true);
-  mpu.setMotionInterrupt(true);
-  Serial.println("MPU 6050 kullanıma hazır");
-}
-
 /****************************
  * Servo fonksiyonları
  ***************************/
@@ -241,17 +203,6 @@ void Servo_Degree()
   delay(7);
 }
 
-/****************************
- * Hareket fonksiyonları
- ***************************/
-void spinMotors(struct MotorPowers motorPowers)
-{
-  frontLeftMotorPower.write(motorPowers.frontLeftMotorPower);
-  frontRightMotorPower.write(motorPowers.frontRightMotorPower);
-  rearLeftMotorPower.write(motorPowers.rearLeftMotorPower);
-  rearRightMotorPower.write(motorPowers.rearRightMotorPower);
-}
-
 void stopMotors()
 {
   frontLeftMotorPower.write(0);
@@ -276,45 +227,7 @@ void Thrust()
 
 void MPU_Motion()
 {
-  if (0) // mpu.getMotionInterruptStatus())
-  {
-    // Get new sensor events with the readings
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-    unsigned long current_time = millis();
-    unsigned long delta_time_in_milliseconds = current_time - last_time;
-    delta_time_in_seconds = (double)delta_time_in_milliseconds / 1000.0;
-
-    // Roll - Pitch
-    mySensor.add(a.orientation.x);
-    Serial.print("roll =");
-    Serial.println(a.orientation.x);
-    roll = mySensor.get();
-
-    mySensor2.add(a.orientation.y);
-    Serial.print("pitch =");
-    Serial.println(a.orientation.y);
-    pitch = mySensor2.get();
-
-    yaw = 0;
-    last_time = current_time;
-    //---------------------------
-    Serial.print("smooth roll =");
-    Serial.println(roll);
-    Serial.print("smooth pitch =");
-    Serial.println(pitch);
-    // Serial.print("yaw =");
-    // Serial.println(yaw);
-    //---------------------------
-    Idle(roll, pitch, yaw);
-  }
   MPU_hareket();
-}
-
-void Idle(double roll, double pitch, double yaw)
-{
-  struct MotorPowers motorPowers = calculateMotorPowers(roll, pitch, yaw);
-  spinMotors(motorPowers);
 }
 
 /****************************
@@ -332,7 +245,7 @@ struct MotorPowers MoveMotorPowers(uint8_t up, uint8_t down, uint8_t right, uint
 
 void Move()
 {
-  if (1) // RemoteXY.up || RemoteXY.down || RemoteXY.left || RemoteXY.right)
+  if (RemoteXY.up || RemoteXY.down || RemoteXY.left || RemoteXY.right)
   {
     while (RemoteXY.up)
     {
@@ -494,13 +407,14 @@ void setup()
    * Eğer 2 farklı seri port kullanılacaksa konfigüre edilecek
    *******************************************************************************/
 
-  // MPU_Init();
   MPU_Baslat();
   // MadgwickFilter
   MadgwickFilter.begin(10); // filtering frequency 100Hz
+  timer1 = timerBegin(0, 80, true);
+  timerAttachInterrupt(timer1, &onTimer1, true);
+  timerAlarmWrite(timer1, 100000, true);
+  timerAlarmEnable(timer1);
   PWM_Init();
-  mySensor.begin(SMOOTHED_AVERAGE, 10);
-  mySensor2.begin(SMOOTHED_AVERAGE, 10);
   Sonar_Servo_Init();
   /****************************
    * sonar init
