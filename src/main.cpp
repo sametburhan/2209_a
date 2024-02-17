@@ -9,63 +9,16 @@
  *
  * Include library
  *****************************************************/
-
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
-#include <Wire.h>
-
 #include "sdkconfig.h"
 #include "esp_system.h"
-#include "MPU.cpp"
+#include "SERVO.cpp"
+#include "VOLTAGE.cpp"
 
 /***************************
  * Define and variable
  **************************/
 #define RUNNING_CORE_0 0
 #define RUNNING_CORE_1 1
-
-#define motor_solon_1 5
-#define motor_sagon_2 23
-#define motor_solarka_3 19
-#define motor_sagarka_4 18
-
-#define servo_pin1 12
-#define servo_pin2 13
-
-/****************************
- * Sonar Pinler
- ***************************/
-// üst sonar
-#define trigPin1 14
-#define echoPin1 27
-#define up_sonar 0
-// alt sonar
-#define trigPin2 25
-#define echoPin2 26
-#define down_sonar 1
-//**************************/
-#define all_sonar 2
-
-// 0 üst 1 alt
-#define object_up 0u
-#define object_down 1u
-
-ESP32PWM pwm;
-Servo sonarServo1;
-Servo sonarServo2;
-
-Adafruit_MPU6050 mpu;
-
-/****************************
- * Variables
- ***************************/
-const int minUs = 1000;
-const int maxUs = 3000; // todo: 2000 yeterli olmazsa ~3000
-
-volatile long duration1, duration2;
-volatile uint8_t distance1, distance2;
-
-volatile bool Collision_Flag = 0;
 
 /****************************
  * Function decleration
@@ -74,340 +27,17 @@ static void TaskFirst(void *pvParameters);
 static void TaskSecond(void *pvParameters);
 static void TaskServo(void *pvParameters);
 static void TaskPreCollision(void *pvParameters);
-static void PWM_Init();
-static void Thrust();
-static void Move();
-static void MPU_Motion();
-MotorPowers MoveMotorPowers(uint8_t up, uint8_t down, uint8_t right, uint8_t left);
-static void stopMotors();
-static void Sonar_Servo_Init();
-static bool Sonar_Detect(int degree);
-static void Pre_Collision();
-static void Servo_Degree();
-static void upOrDown(uint8_t upOrDown);
 
-struct DetectObject
-{
-  uint8_t up_down; // 0 üst 1 alt
-  int degree;
-};
-struct DetectObject object;
-
-/////////////////////////////////////////////
-//           Wifi RemoteXY Include         //
-/////////////////////////////////////////////
-
-#define REMOTEXY_MODE__ESP32CORE_WIFI_POINT
-#include <WiFi.h>
-#include <RemoteXY.h>
-
-// RemoteXY connection settings
-#define REMOTEXY_WIFI_SSID "ESP_Drone"
-#define REMOTEXY_WIFI_PASSWORD "12345678"
-#define REMOTEXY_SERVER_PORT 6377
-
-// RemoteXY configurate
-#pragma pack(push, 1)
-uint8_t RemoteXY_CONF[] = // 70 bytes
-    {255, 5, 0, 0, 0, 63, 0, 16, 31, 1, 4, 0, 50, 24, 8, 51, 119, 26, 1, 0,
-     4, 45, 12, 12, 2, 31, 115, 111, 108, 0, 1, 0, 18, 31, 12, 12, 119, 31, 105, 108,
-     101, 114, 105, 0, 1, 0, 32, 45, 12, 12, 2, 31, 115, 97, 196, 159, 0, 1, 0, 18,
-     60, 12, 12, 119, 31, 103, 101, 114, 105, 0};
-
-// this structure defines all the variables and events of your control interface
-struct
-{
-
-  // input variables
-  int8_t thrust; // =0..100 slider position
-  uint8_t left;  // =1 if button pressed, else =0
-  uint8_t up;    // =1 if button pressed, else =0
-  uint8_t right; // =1 if button pressed, else =0
-  uint8_t down;  // =1 if button pressed, else =0
-
-  // other variable
-  uint8_t connect_flag; // =1 if wire connected, else =0
-
-} RemoteXY;
-#pragma pack(pop)
-
-/////////////////////////////////////////////
-//           END RemoteXY include          //
-/////////////////////////////////////////////
-
-/****************************
- * Başlangıç fonksiyonları
- ***************************/
-void PWM_Init()
-{
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  ESP32PWM::allocateTimer(3);
-
-  frontLeftMotorPower.setPeriodHertz(100);  // Standard 100hz
-  frontRightMotorPower.setPeriodHertz(100); // Standard 100hz
-  rearLeftMotorPower.setPeriodHertz(100);   // Standard 100hz
-  rearRightMotorPower.setPeriodHertz(100);  // Standard 100hz
-
-  frontLeftMotorPower.attach(motor_solon_1, minUs, maxUs);
-  frontRightMotorPower.attach(motor_sagon_2, minUs, maxUs);
-  rearLeftMotorPower.attach(motor_solarka_3, minUs, maxUs);
-  rearRightMotorPower.attach(motor_sagarka_4, minUs, maxUs);
-
-  stopMotors();
-}
-
-void Sonar_Servo_Init()
-{
-  sonarServo1.setPeriodHertz(50); // Standard 100hz
-  sonarServo2.setPeriodHertz(50); // Standard 100hz
-
-  sonarServo1.attach(servo_pin1, minUs, maxUs);
-  sonarServo2.attach(servo_pin2, minUs, maxUs);
-}
-
-/****************************
- * Servo fonksiyonları
- ***************************/
-void Servo_Degree()
-{
-  int degree;
-  for (degree = -180; degree < 180; degree++)
-  {
-    sonarServo1.write(degree);
-    sonarServo2.write(degree);
-    delay(2);
-    if (degree % 20 == 0)
-    {
-      if (Sonar_Detect(degree) == true)
-      {
-        Collision_Flag = true;
-      }
-    }
-  }
-  delay(7);
-  for (degree = 180; degree > -180; degree--)
-  {
-    sonarServo1.write(degree);
-    sonarServo2.write(degree);
-    delay(2);
-    if (degree % 20 == 0)
-    {
-      if (Sonar_Detect(degree) == true)
-      {
-        Collision_Flag = true;
-      }
-    }
-  }
-  delay(7);
-}
-
-void stopMotors()
-{
-  frontLeftMotorPower.write(0);
-  frontRightMotorPower.write(0);
-  rearLeftMotorPower.write(0);
-  rearRightMotorPower.write(0);
-}
-
-void Thrust()
-{
-  // delay(500);
-  if (set_thrust != 30) // RemoteXY.thrust != set_thrust
-  {
-    set_thrust = RemoteXY.thrust;
-    set_thrust = 30;
-    frontLeftMotorPower.write(set_thrust);
-    frontRightMotorPower.write(set_thrust);
-    rearLeftMotorPower.write(set_thrust);
-    rearRightMotorPower.write(set_thrust);
-  }
-}
-
-void MPU_Motion()
-{
-  MPU_hareket();
-}
-
-/****************************
- * Manevra fonksiyonları
- ***************************/
-struct MotorPowers MoveMotorPowers(uint8_t up, uint8_t down, uint8_t right, uint8_t left)
-{
-  struct MotorPowers motorPowers;
-  motorPowers.frontLeftMotorPower = set_thrust + down + right;
-  motorPowers.frontRightMotorPower = set_thrust + down + left;
-  motorPowers.rearLeftMotorPower = set_thrust + up + right;
-  motorPowers.rearRightMotorPower = set_thrust + up + left;
-  return motorPowers;
-}
-
-void Move()
-{
-  if (RemoteXY.up || RemoteXY.down || RemoteXY.left || RemoteXY.right)
-  {
-    while (RemoteXY.up)
-    {
-      struct MotorPowers motorPowers = MoveMotorPowers(7, 0, 0, 0);
-      spinMotors(motorPowers);
-      Serial.println("ileri");
-      delay(1);
-    }
-    while (RemoteXY.down)
-    {
-      struct MotorPowers motorPowers = MoveMotorPowers(0, 7, 0, 0);
-      spinMotors(motorPowers);
-      Serial.println("geri");
-      delay(1);
-    }
-    while (RemoteXY.right)
-    {
-      struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 7, 0);
-      spinMotors(motorPowers);
-      Serial.println("sağ");
-      delay(1);
-    }
-    while (RemoteXY.left)
-    {
-      struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 7);
-      spinMotors(motorPowers);
-      Serial.println("sol");
-      delay(1);
-    }
-    struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 0);
-    spinMotors(motorPowers);
-  }
-}
-
-/****************************
- * Engel tespit ve kaçış fonksiyonları
- ***************************/
-bool Sonar_Detect(int degree)
-{
-  digitalWrite(trigPin1, LOW);
-  digitalWrite(trigPin2, LOW);
-  delayMicroseconds(2);
-  digitalWrite(trigPin1, HIGH);
-  digitalWrite(trigPin2, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin1, LOW);
-  digitalWrite(trigPin2, LOW);
-  duration1 = pulseIn(echoPin1, HIGH);
-  distance1 = duration1 * 0.034 / 2;
-
-  duration2 = pulseIn(echoPin2, HIGH);
-  distance2 = duration2 * 0.034 / 2;
-  if (distance1 < 12)
-  {
-    object.degree = degree;
-    // engel yukarıdan geldi
-    object.up_down = up_sonar;
-    return true;
-  }
-  if (distance2 < 12)
-  {
-    object.degree = -1 * degree;
-    if (object.up_down == up_sonar)
-    {
-      // engel hem üstten hem alttan geldi
-      object.up_down == all_sonar;
-    }
-    else
-    {
-      // engel aşağıdan geldi
-      object.up_down = down_sonar;
-    }
-    return true;
-  }
-  else
-  {
-    return false;
-  }
-}
-
-/********************************************************************************
- * Engel aşağıdan gelirse hafif yükselerek geri manevra yap
- * Yukarıdan gelirse hafif alçalarak geri manevra yap
- * Engel sağdan gelirse hafif sola git
- * Soldan gelirse hafif sağa git
- * Karşıdan gelirse geri git
- *******************************************************************************/
-void Pre_Collision()
-{
-  /****************************
-   * Sağ veya soldan gelen engel
-   ***************************/
-  if (object.degree > 90 && object.up_down != all_sonar)
-  {
-    upOrDown(object.up_down);
-    // sağa git
-    struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 7, 0);
-    spinMotors(motorPowers);
-  }
-  else if (object.degree < 90 && object.up_down != all_sonar)
-  {
-
-    upOrDown(object.up_down);
-    // sola git
-    struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 7);
-    spinMotors(motorPowers);
-  }
-  /****************************
-   * Karşıdan gelen engel
-   ***************************/
-  else
-  {
-    // doğrudan geri gel
-    struct MotorPowers motorPowers = MoveMotorPowers(0, 7, 0, 0);
-    spinMotors(motorPowers);
-  }
-
-  delay(200); // todo: 200ms çok olabilir
-  struct MotorPowers motorPowers = MoveMotorPowers(0, 0, 0, 0);
-  spinMotors(motorPowers);
-  Thrust();
-  Serial.println("kaçtık");
-}
-
-void upOrDown(uint8_t upOrDown)
-{
-  if (upOrDown == object_up)
-  {
-    /**
-     * engel yukarıdan geldi biraz alçal "thrust =- 5"
-     */
-    set_thrust = -5;
-    frontLeftMotorPower.write(set_thrust);
-    frontRightMotorPower.write(set_thrust);
-    rearLeftMotorPower.write(set_thrust);
-    rearRightMotorPower.write(set_thrust);
-  }
-  else if (!upOrDown == object_down)
-  {
-    /**
-     * engel aşağıdan geldi biraz yüksel "thrust =+ 5"
-     */
-    set_thrust = +5;
-    frontLeftMotorPower.write(set_thrust);
-    frontRightMotorPower.write(set_thrust);
-    rearLeftMotorPower.write(set_thrust);
-    rearRightMotorPower.write(set_thrust);
-  }
-}
-
-/****************************
- * MPU 6050
- ***************************/
 void setup()
 {
-  Serial.begin(115200);
   /********************************************************************************
    * Serial1.begin(115200);
    * Eğer 2 farklı seri port kullanılacaksa konfigüre edilecek
    *******************************************************************************/
+  Serial.begin(115200);
+  MPU_Init();
+  Voltage_Init();
 
-  MPU_Baslat();
   // MadgwickFilter
   MadgwickFilter.begin(10); // filtering frequency 100Hz
   timer1 = timerBegin(0, 80, true);
@@ -415,10 +45,12 @@ void setup()
   timerAlarmWrite(timer1, 100000, true);
   timerAlarmEnable(timer1);
   PWM_Init();
-  Sonar_Servo_Init();
+  resetPidVariables();
+
   /****************************
    * sonar init
    ***************************/
+  Sonar_Servo_Init();
   pinMode(trigPin1, OUTPUT); // Sets the trigPin as an Output
   pinMode(echoPin1, INPUT);  // Sets the echoPin as an Input
 
@@ -427,12 +59,12 @@ void setup()
   /****************************
    * sonar
    ***************************/
+
   RemoteXY_Init();
-  while (0) // RemoteXY.connect_flag)
+  while (RemoteXY.connect_flag)
   {
     Serial.println("BAğlantı sağlanmadı...");
     RemoteXY_Handler();
-    delay(50);
   }
 
   xTaskCreatePinnedToCore(
@@ -500,7 +132,7 @@ void TaskSecond(void *pvParameters) //
     Thrust();
     Move();
     // long int t1 = micros();
-    MPU_Motion();
+    MPU();
     // long int t2;
     // Serial.print("Time taken by the task: ");
     // Serial.print(t1 - t2);
@@ -518,11 +150,15 @@ void TaskServo(void *pvParameters)
   (void)pvParameters;
   for (;;)
   {
-    if (false) // set_thrust != 0)
+    if (0) // set_thrust != 0)
     {
       Servo_Degree();
     }
-    delay(1);
+    delay(2);
+    if (Measure())
+    {
+      throttledown();
+    }
   }
 }
 

@@ -1,5 +1,4 @@
-#include "wire.h"
-#include "Arduino.h"
+#include <Wire.h>
 #include <MadgwickAHRS.h>
 #include <math.h>
 #include "PID.cpp"
@@ -44,12 +43,12 @@ void IRAM_ATTR onTimer1()
     portEXIT_CRITICAL_ISR(&timerMux);
 }
 
-void MPU_Baslat();
-void MPU_hareket();
+void MPU_Init();
+void MPU();
 void output();
 void read_mpu_6050_data();
 
-void MPU_Baslat()
+void MPU_Init()
 {
     Wire.begin();
     Wire.beginTransmission(0x68);
@@ -71,17 +70,18 @@ void MPU_Baslat()
     Wire.write(0x1A);             // We want to write to the CONFIG register (1A hex)
     Wire.write(0x03);             // Set the register bits as 00000011 (Set Digital Low Pass Filter to ~43Hz)
     Wire.endTransmission();       // End the transmission with the gyro
-    Serial.print("MPU6050 Hazır.");
+    Serial.println("MPU6050 Hazır.");
+
     roll_mov.begin();
     pitch_mov.begin();
     yaw_mov.begin();
 }
 
-void MPU_hareket()
+void MPU()
 {
     unsigned long time; // 「time」をunsigned longで変数宣言, declared "time"as variable
     time = millis();
-    if (timeCounter1 > 0)
+    if (timeCounter1 > 0 && Pid_Flag == 1)
     {
         portENTER_CRITICAL(&timerMux);
         timeCounter1--;
@@ -91,13 +91,23 @@ void MPU_hareket()
         ROLL = roll_mov.reading(MadgwickFilter.getRoll());
         PITCH = pitch_mov.reading(MadgwickFilter.getPitch());
         YAW = yaw_mov.reading(MadgwickFilter.getYaw());
-        // output();
+        output();
         Idle(PITCH, ROLL, YAW);
+    }
+    else if (Pid_Flag == 0)
+    {
+        resetPidVariables();
+        ROLL = 0;
+        PITCH = 0;
+        YAW = 0;
+        //last_time = 0;
     }
 }
 
 void read_mpu_6050_data()
-{                                 // Subroutine for reading the raw gyro and accelerometer data
+{
+    // her data alırken i2c yolunu kontrol et bir sorun varsa güvenle in
+    //  Subroutine for reading the raw gyro and accelerometer data
     Wire.beginTransmission(0x68); // Start communicating with the MPU-6050
     Wire.write(0x3B);             // Send the requested starting register
     Wire.endTransmission();       // End the transmission
@@ -134,17 +144,21 @@ void Idle(double roll, double pitch, double yaw)
  ***************************/
 void spinMotors(struct MotorPowers motorPowers)
 {
-    Serial.print("sol ön =");
-    Serial.println(motorPowers.frontLeftMotorPower);
-    Serial.print("sağ ön =");
-    Serial.println(motorPowers.frontRightMotorPower);
-    Serial.print("sol arka = ");
-    Serial.println(motorPowers.rearLeftMotorPower);
-    Serial.print("sağ arka = ");
-    Serial.println(motorPowers.rearRightMotorPower);
-    Serial.println("******************************");
-    frontLeftMotorPower.write(motorPowers.frontLeftMotorPower);
-    frontRightMotorPower.write(motorPowers.frontRightMotorPower);
-    rearLeftMotorPower.write(motorPowers.rearLeftMotorPower);
-    rearRightMotorPower.write(motorPowers.rearRightMotorPower);
+    // Serial.print("sol ön =");
+    Serial.print(motorPowers.frontLeftMotorPower);
+    Serial.print(",");
+    // Serial.print("sağ ön =");
+    Serial.print(motorPowers.frontRightMotorPower);
+    Serial.print(",");
+    // Serial.print("sol arka = ");
+    Serial.print(motorPowers.rearLeftMotorPower);
+    Serial.print(",");
+    // Serial.print("sağ arka = ");
+    Serial.print(motorPowers.rearRightMotorPower);
+    Serial.print(",");
+    Serial.println("\n");
+    frontLeftMotorPower.writeMicroseconds(motorPowers.frontLeftMotorPower);
+    frontRightMotorPower.writeMicroseconds(motorPowers.frontRightMotorPower);
+    rearLeftMotorPower.writeMicroseconds(motorPowers.rearLeftMotorPower);
+    rearRightMotorPower.writeMicroseconds(motorPowers.rearRightMotorPower);
 }
