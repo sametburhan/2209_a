@@ -150,12 +150,17 @@ void TaskServo(void *pvParameters)
   (void)pvParameters;
   for (;;)
   {
-    if (0) // set_thrust != 0)
+    if (set_thrust != 0)
     {
       Servo_Degree();
     }
+    else
+    {
+      sonarServo1.write(90);
+      sonarServo1.write(90);
+    }
     delay(2);
-    if (Measure())
+    if (Voltage_Measure(set_thrust))
     {
       throttledown();
     }

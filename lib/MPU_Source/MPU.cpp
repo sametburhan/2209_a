@@ -81,26 +81,28 @@ void MPU()
 {
     unsigned long time; // 「time」をunsigned longで変数宣言, declared "time"as variable
     time = millis();
-    if (timeCounter1 > 0 && Pid_Flag == 1)
+    if (timeCounter1 > 0)
     {
         portENTER_CRITICAL(&timerMux);
         timeCounter1--;
         portEXIT_CRITICAL(&timerMux);
-        read_mpu_6050_data(); // Read the raw acc and gyro data from the MPU-6050
-        MadgwickFilter.update(GyX / SF_Gy, GyY / SF_Gy, GyZ / SF_Gy, AcX / SF_Acc, AcY / SF_Acc, AcZ / SF_Acc, MgX / SF_Mg, MgY / SF_Mg, MgZ / SF_Mg);
-        ROLL = roll_mov.reading(MadgwickFilter.getRoll());
-        PITCH = pitch_mov.reading(MadgwickFilter.getPitch());
-        YAW = yaw_mov.reading(MadgwickFilter.getYaw());
-        output();
-        Idle(PITCH, ROLL, YAW);
-    }
-    else if (Pid_Flag == 0)
-    {
-        resetPidVariables();
-        ROLL = 0;
-        PITCH = 0;
-        YAW = 0;
-        //last_time = 0;
+        if (Pid_Flag == 1)
+        {
+            read_mpu_6050_data(); // Read the raw acc and gyro data from the MPU-6050
+            MadgwickFilter.update(GyX / SF_Gy, GyY / SF_Gy, GyZ / SF_Gy, AcX / SF_Acc, AcY / SF_Acc, AcZ / SF_Acc, MgX / SF_Mg, MgY / SF_Mg, MgZ / SF_Mg);
+            ROLL = roll_mov.reading(MadgwickFilter.getRoll());
+            PITCH = pitch_mov.reading(MadgwickFilter.getPitch());
+            YAW = yaw_mov.reading(MadgwickFilter.getYaw());
+            // output();
+            Idle(PITCH, ROLL, YAW);
+        }
+        else if (Pid_Flag == 0)
+        {
+            resetPidVariables();
+            ROLL = 0;
+            PITCH = 0;
+            // last_time = 0;
+        }
     }
 }
 
@@ -145,18 +147,18 @@ void Idle(double roll, double pitch, double yaw)
 void spinMotors(struct MotorPowers motorPowers)
 {
     // Serial.print("sol ön =");
-    Serial.print(motorPowers.frontLeftMotorPower);
-    Serial.print(",");
+    // Serial.print(motorPowers.frontLeftMotorPower);
+    // Serial.print(",");
     // Serial.print("sağ ön =");
-    Serial.print(motorPowers.frontRightMotorPower);
-    Serial.print(",");
+    // Serial.print(motorPowers.frontRightMotorPower);
+    // Serial.print(",");
     // Serial.print("sol arka = ");
-    Serial.print(motorPowers.rearLeftMotorPower);
-    Serial.print(",");
+    // Serial.print(motorPowers.rearLeftMotorPower);
+    // Serial.print(",");
     // Serial.print("sağ arka = ");
-    Serial.print(motorPowers.rearRightMotorPower);
-    Serial.print(",");
-    Serial.println("\n");
+    // Serial.print(motorPowers.rearRightMotorPower);
+    // Serial.print(",");
+    // Serial.println("\n");
     frontLeftMotorPower.writeMicroseconds(motorPowers.frontLeftMotorPower);
     frontRightMotorPower.writeMicroseconds(motorPowers.frontRightMotorPower);
     rearLeftMotorPower.writeMicroseconds(motorPowers.rearLeftMotorPower);

@@ -7,7 +7,7 @@
  * ADC1 pinleri kullanımda
  */
 
-bool Measure();
+bool Voltage_Measure(uint8_t set_thrust);
 void Voltage_Init();
 
 void Voltage_Init()
@@ -17,12 +17,12 @@ void Voltage_Init()
     digitalWrite(buzzerHigh_pin, LOW);
 }
 
-bool Measure()
+bool Voltage_Measure(uint8_t set_thrust)
 {
     float voltage = analogRead(voltage_pin);
     // Serial.print(voltage);
     // Serial.println("v");
-    if (voltage < 2050)
+    if (voltage < 2100 && set_thrust == 0)
     {
         digitalWrite(buzzerHigh_pin, HIGH);
         return true;

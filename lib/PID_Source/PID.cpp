@@ -23,14 +23,30 @@ double calculateYawError(double yaw, double DeltaTimeInSeconds);
 double fix360degrees(double val);
 
 //----------- PID CONFIGURATION-----------
-double KP_roll_pitch = 0.8; // 0.7
-double KI_roll_pitch = 0.1; // 0.04
-double KD_roll_pitch = 0.1; // 0.015
+double KP_roll_pitch = 0.1;
+double KI_roll_pitch = 0.0004;
+double KD_roll_pitch = 0.005;
 
 /*----------- PID CONFIGURATION-----------
 double KP_roll_pitch = 0.30;
 double KI_roll_pitch = 0.10;
 double KD_roll_pitch = 0.10;
+
+float pid_p_gain_roll = 1.3;               //Gain setting for the roll P-controller
+float pid_i_gain_roll = 0.04;              //Gain setting for the roll I-controller
+float pid_d_gain_roll = 18.0;              //Gain setting for the roll D-controller
+
+#define KP_roll 1.00
+#define KI_roll 0.0005
+#define KD_roll 400.00
+
+        1.4
+        0.03
+        15
+
+        pitchKp = 2.4;
+        pitchKi = 0.0105;
+        pitchKd = 62.4;
 */
 
 double KP_yaw = 0.40;
@@ -45,7 +61,7 @@ volatile uint8_t set_thrust = 0;
 double roll_pid_i, pitch_pid_i, yaw_pid_i, roll_last_error, pitch_last_error, yaw_last_error;
 double roll_control_signal = 0, pitch_control_signal = 0, yaw_control_signal = 0;
 
-double QUADCOPTER_MAX_TILT_ANGLE = 20.00; // roll, pitch tilt angle limit in degrees
+double QUADCOPTER_MAX_TILT_ANGLE = 10.00; // roll, pitch tilt angle limit in degrees
 double ROLL_PITCH_CONTROL_SIGNAL_LIMIT = KP_roll_pitch * QUADCOPTER_MAX_TILT_ANGLE * 2;
 
 struct MotorPowers calculateMotorPowers(double roll, double pitch, double yaw)
@@ -75,8 +91,6 @@ struct MotorPowers calculateMotorPowers(double roll, double pitch, double yaw)
     motorPowers.frontRightMotorPower = map((round(set_thrust - roll_control_signal + pitch_control_signal + yaw_control_signal)), 0, 100, minUs, maxUs);
     motorPowers.rearLeftMotorPower = map((round(set_thrust + roll_control_signal - pitch_control_signal + yaw_control_signal)) + 10, 0, 100, minUs, maxUs);
     motorPowers.rearRightMotorPower = map((round(set_thrust - roll_control_signal - pitch_control_signal - yaw_control_signal)) - 2, 0, 100, minUs, maxUs);
-
-    // motorPowers = reduceMotorPowers(motorPowers);
 
     return motorPowers;
 }
