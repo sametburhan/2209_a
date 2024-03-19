@@ -59,7 +59,7 @@ void Servo_Degree()
         delay(2);
         if (degree % 20 == 0)
         {
-            if (0) // Sonar_Detect(degree) == true)
+            if (Sonar_Detect(degree) == true)
             {
                 Collision_Flag = true;
             }
@@ -73,7 +73,7 @@ void Servo_Degree()
         delay(2);
         if (degree % 20 == 0)
         {
-            if (0) // Sonar_Detect(degree) == true)
+            if (Sonar_Detect(degree) == true)
             {
                 Collision_Flag = true;
             }

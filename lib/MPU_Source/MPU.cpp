@@ -20,15 +20,15 @@ Servo frontRightMotorPower;
 Servo rearLeftMotorPower;
 Servo rearRightMotorPower;
 
-// Declaring some global variables
+// Değişkenler
 const int MPU_addr = 0x68; // I2C address of the MPU-6050
 int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ, MgX, MgY, MgZ;
-float SF_Acc = 16384;             // 加速度のスケールファクタ   (digit/g)
-float SF_Gy = 131;                // #ジャイロのスケールファクタ  (digit/dps)
-float SF_Mg = 500;                // 磁気のスケールファクタ(500☛0.6かも。。)
-float SF_Tmp = 333.87;            // 温度のスケールファクタ
-float g2mpss = 9.80665;           // Gをm/s2に変換
-float deg2rad = 3.14159265 / 180; // ディグリーをラジアンに
+float SF_Acc = 16384;
+float SF_Gy = 131;
+float SF_Mg = 500;
+float SF_Tmp = 333.87;
+float g2mpss = 9.80665;
+float deg2rad = 3.14159265 / 180;
 int i;
 float ROLL, PITCH, YAW;
 
@@ -79,7 +79,7 @@ void MPU_Init()
 
 void MPU()
 {
-    unsigned long time; // 「time」をunsigned longで変数宣言, declared "time"as variable
+    unsigned long time;
     time = millis();
     if (timeCounter1 > 0)
     {
@@ -101,7 +101,7 @@ void MPU()
             resetPidVariables();
             ROLL = 0;
             PITCH = 0;
-            // last_time = 0;
+            last_time = 0;
         }
     }
 }

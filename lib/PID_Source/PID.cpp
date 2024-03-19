@@ -72,7 +72,8 @@ struct MotorPowers calculateMotorPowers(double roll, double pitch, double yaw)
     // calculate orientation errors (error: difference between desired orientation and actual orientation)
     double rollError = -roll;   // receiverCommands.RollAngle
     double pitchError = -pitch; // receiverCommands.PitchAngle
-    double yawError = 0;        // calculateYawError(yaw, delta_time_in_seconds); // imu_values);
+    // yaw verisi motor kontrolünde kullanılmayacak
+    double yawError = 0; // calculateYawError(yaw, delta_time_in_seconds); // imu_values);
 
     // calculate control gains based on errors
     roll_control_signal = getControlSignal(rollError, KP_roll_pitch, KI_roll_pitch, KD_roll_pitch, roll_pid_i, roll_last_error, delta_time_in_seconds);
@@ -142,7 +143,7 @@ double fix360degrees(double val)
 }
 
 /**
- * Optimizasyon opppsiyonell
+ * Cutoff fonksiyonu
  */
 struct MotorPowers reduceMotorPowers(MotorPowers motorPowers)
 { // to preserve balance if throttle limit exceeds the max value (180)
